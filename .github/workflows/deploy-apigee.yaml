@@ -24,12 +24,15 @@ jobs:
         with:
           credentials_json: '${{ secrets.GCP_SA_KEY }}'
 
-      # This step is now corrected to use apt-get for all installations
-      - name: Set up Cloud SDK and tools
-        run: |
-          sudo apt-get update && sudo apt-get install -y jq
-          # Use apt-get to install beta components, not 'gcloud components install'
-          sudo apt-get install -y google-cloud-cli-beta-commands
+      # This step sets up gcloud AND installs the beta components correctly
+      - name: Set up Cloud SDK
+        uses: 'google-github-actions/setup-gcloud@v2'
+        with:
+          install_components: 'beta'
+
+      # Install jq in a separate clean step
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
 
       - name: Zip the API Proxy bundle
         run: |
@@ -55,7 +58,6 @@ jobs:
       # STEP 2: Deploy the newly created revision using --override for zero-downtime
       - name: Deploy New Revision with Zero Downtime
         run: |
-          # The --override flag tells Apigee to perform a seamless deployment
           gcloud apigee apis deploy ${{ steps.import.outputs.revision_id }} \
             --api="product-catalog-v1" \
             --environment="eval" \
