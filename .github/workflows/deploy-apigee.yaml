@@ -1,11 +1,10 @@
 name: Deploy Apigee Proxy
 
-# This workflow runs on any push to the main branch
 on:
   push:
     branches:
       - main
-  workflow_dispatch: # Allows manual triggering from the Actions tab
+  workflow_dispatch:
 
 jobs:
   deploy-apigee-proxy:
@@ -13,29 +12,32 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Check out the repository code
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. Authenticate to Google Cloud using the stored Service Account Key
       - id: 'auth'
         uses: 'google-github-actions/auth@v2'
         with:
           credentials_json: '${{ secrets.GCP_SA_KEY }}'
 
-      # 3. Set up the gcloud CLI
       - name: Set up Cloud SDK
         uses: 'google-github-actions/setup-gcloud@v2'
 
-      # 4. Install the gcloud beta components non-interactively
       - name: Install gcloud beta components
         run: gcloud components install beta --quiet
 
-      # 4. Deploy the Apigee proxy using gcloud
+      # <<< NEW STEP ADDED HERE >>>
+      - name: Zip the API Proxy bundle
+        run: |
+          cd ./product-catalog-v1
+          zip -r ../proxy.zip . -x "*.DS_Store"
+
+      # <<< DEPLOYMENT STEP CORRECTED HERE >>>
       - name: Deploy API Proxy to eval environment
         run: |
-          gcloud beta apigee apis deploy "product-catalog-v1" \
+          gcloud apigee apis deploy "product-catalog-v1" \
             --project="${{ secrets.GCP_PROJECT_ID }}" \
             --organization="${{ secrets.GCP_APIGEE_ORG }}" \
             --environment="eval" \
-            --source="./product-catalog-v1"
+            --service-account-from-file="${{ steps.auth.outputs.credentials_file_path }}" \
+            --import=proxy.zip
