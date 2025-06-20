@@ -38,4 +38,4 @@ jobs:
             --project="${{ secrets.GCP_PROJECT_ID }}" \
             --organization="${{ secrets.GCP_APIGEE_ORG }}" \
             --environment="eval" \
-            --api-proxy-folder="./product-catalog-v1"
+            --source="./product-catalog-v1"
