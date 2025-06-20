@@ -19,25 +19,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # This auth step is still required for the deploy action to authenticate
       - id: 'auth'
         uses: 'google-github-actions/auth@v2'
         with:
           credentials_json: '${{ secrets.GCP_SA_KEY }}'
 
-      - name: Set up Cloud SDK
-        uses: 'google-github-actions/setup-gcloud@v2'
-      
-      # Step 1: Zip the API Proxy bundle. This is unchanged and works.
-      - name: Zip the API Proxy bundle
-        run: |
-          cd ./product-catalog-v1
-          zip -r ../proxy.zip . -x "*.DS_Store"
-
-      # Step 2: Deploy the zipped bundle. This command is now corrected.
-      - name: Deploy API Proxy from Zip
-        run: |
-          gcloud apigee apis deploy "product-catalog-v1" \
-            --project="${{ secrets.GCP_PROJECT_ID }}" \
-            --organization="${{ secrets.GCP_APIGEE_ORG }}" \
-            --environment="eval" \
-            --source="proxy.zip"
+      # This is the ONLY step needed for deployment.
+      # It replaces all the 'gcloud', 'zip', and 'install' steps.
+      - name: Deploy Apigee proxy using Google's official Action
+        uses: google-github-actions/deploy-apigee-proxy@v1
+        with:
+          proxy_name: 'product-catalog-v1'
+          directory: './product-catalog-v1'
+          environment: 'eval'
+          gcp_project_id: '${{ secrets.GCP_PROJECT_ID }}'
+          gcp_organization_id: '${{ secrets.GCP_APIGEE_ORG }}'
