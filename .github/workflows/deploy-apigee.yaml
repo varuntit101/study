@@ -24,13 +24,11 @@ jobs:
         with:
           credentials_json: '${{ secrets.GCP_SA_KEY }}'
 
-      # This step sets up gcloud AND installs the beta components correctly
       - name: Set up Cloud SDK
         uses: 'google-github-actions/setup-gcloud@v2'
         with:
           install_components: 'beta'
 
-      # Install jq in a separate clean step
       - name: Install jq
         run: sudo apt-get update && sudo apt-get install -y jq
 
@@ -39,7 +37,6 @@ jobs:
           cd ./product-catalog-v1
           zip -r ../proxy.zip . -x "*.DS_Store"
 
-      # STEP 1: Import the new bundle via the Apigee REST API to create a new revision
       - name: Import Bundle via API to Create New Revision
         id: import
         run: |
@@ -55,7 +52,6 @@ jobs:
           echo "Discovered new revision: $NEW_REVISION"
           echo "revision_id=$NEW_REVISION" >> "$GITHUB_OUTPUT"
 
-      # STEP 2: Deploy the newly created revision using --override for zero-downtime
       - name: Deploy New Revision with Zero Downtime
         run: |
           gcloud apigee apis deploy ${{ steps.import.outputs.revision_id }} \
@@ -64,3 +60,45 @@ jobs:
             --organization="${{ secrets.GCP_APIGEE_ORG }}" \
             --project="${{ secrets.GCP_PROJECT_ID }}" \
             --override
+      
+      # <<< NEW STEP ADDED HERE >>>
+      - name: Automated Smoke Test
+        run: |
+          # Give the deployment a few seconds to fully propagate
+          sleep 15
+          
+          PROXY_ENDPOINT="https://${{ secrets.APIGEE_HOSTNAME }}/product-catalog-v1/products"
+          
+          echo "--- Running Test 1: Unauthorized Request ---"
+          # Use curl to get only the HTTP status code
+          STATUS_CODE_UNAUTHORIZED=$(curl -s -o /dev/null -w "%{http_code}" "$PROXY_ENDPOINT")
+          
+          if [[ "$STATUS_CODE_UNAUTHORIZED" -ne 401 ]]; then
+            echo "Error: Unauthorized test failed! Expected 401, but got $STATUS_CODE_UNAUTHORIZED"
+            exit 1
+          fi
+          echo "Success: Received 401 Unauthorized as expected."
+
+          echo "--- Running Test 2: Authorized Request ---"
+          # Make the request and capture the response body and status code
+          HTTP_RESPONSE=$(curl -s -w "\nHTTP_STATUS_CODE:%{http_code}" "$PROXY_ENDPOINT?apikey=${{ secrets.APIGEE_API_KEY }}")
+          
+          # Extract the body and status code
+          HTTP_BODY=$(echo "$HTTP_RESPONSE" | sed '$d')
+          STATUS_CODE_AUTHORIZED=$(echo "$HTTP_RESPONSE" | tail -n1 | cut -d: -f2)
+
+          if [[ "$STATUS_CODE_AUTHORIZED" -ne 200 ]]; then
+            echo "Error: Authorized test failed! Expected 200, but got $STATUS_CODE_AUTHORIZED"
+            exit 1
+          fi
+          echo "Success: Received 200 OK as expected."
+
+          echo "--- Running Test 3: Content Validation ---"
+          # Check if the response body contains an expected string
+          if ! echo "$HTTP_BODY" | grep -q "Microservices Mug"; then
+            echo "Error: Content validation failed! Response did not contain 'Microservices Mug'."
+            echo "Response Body: $HTTP_BODY"
+            exit 1
+          fi
+          echo "Success: Response body contains expected content."
+          echo "All tests passed!"
