@@ -12,6 +12,8 @@
     </PostFlow>
     <Flows/>
     <HTTPTargetConnection>
-        <URL>https://d194-2401-4900-45d0-9877-edb8-5940-9e2b-49a1.ngrok-free.app</URL>
+        <LoadBalancer>
+            <Server name="k8s-local-backend"/>
+        </LoadBalancer>
     </HTTPTargetConnection>
 </TargetEndpoint>
