@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: product-api-deployment
+spec:
+  replicas: 2 # Run two instances of our app for availability
+  selector:
+    matchLabels:
+      app: product-api
+  template:
+    metadata:
+      labels:
+        app: product-api
+    spec:
+      containers:
+      - name: product-api-container
+        image: product-api:v1
+        imagePullPolicy: IfNotPresent # Tells K8s to use the local image if the tag exists
+        ports:
+        - containerPort: 5000
