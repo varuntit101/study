@@ -19,19 +19,45 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # This auth step is still required for the deploy action to authenticate
       - id: 'auth'
         uses: 'google-github-actions/auth@v2'
         with:
           credentials_json: '${{ secrets.GCP_SA_KEY }}'
 
-      # This is the ONLY step needed for deployment.
-      # It replaces all the 'gcloud', 'zip', and 'install' steps.
-      - name: Deploy Apigee proxy using Google's official Action
-        uses: google-github-actions/deploy-apigee-proxy@v1
-        with:
-          proxy_name: 'product-catalog-v1'
-          directory: './product-catalog-v1'
-          environment: 'eval'
-          gcp_project_id: '${{ secrets.GCP_PROJECT_ID }}'
-          gcp_organization_id: '${{ secrets.GCP_APIGEE_ORG }}'
+      - name: Set up Cloud SDK and tools
+        run: |
+          sudo apt-get update && sudo apt-get install -y jq
+          gcloud components install beta --quiet
+
+      - name: Zip the API Proxy bundle
+        run: |
+          cd ./product-catalog-v1
+          zip -r ../proxy.zip . -x "*.DS_Store"
+
+      # STEP 1: Import the new bundle via the Apigee REST API to create a new revision
+      - name: Import Bundle via API to Create New Revision
+        id: import
+        run: |
+          TOKEN=$(gcloud auth print-access-token)
+          
+          IMPORT_OUTPUT=$(curl -s -X POST "https://apigee.googleapis.com/v1/organizations/${{ secrets.GCP_APIGEE_ORG }}/apis?action=import&name=product-catalog-v1" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/octet-stream" \
+            --data-binary "@proxy.zip")
+            
+          echo "API Response: $IMPORT_OUTPUT"
+          NEW_REVISION=$(echo "$IMPORT_OUTPUT" | jq -r '.revision')
+          echo "Discovered new revision: $NEW_REVISION"
+          echo "revision_id=$NEW_REVISION" >> "$GITHUB_OUTPUT"
+
+      # STEP 2: Deploy the new revision using --override for zero-downtime
+      - name: Deploy New Revision with Zero Downtime
+        run: |
+          # The --override flag tells Apigee to perform a seamless deployment,
+          # keeping the old revision active until the new one is fully deployed.
+          gcloud apigee apis deploy ${{ steps.import.outputs.revision_id }} \
+            --api="product-catalog-v1" \
+            --environment="eval" \
+            --organization="${{ secrets.GCP_APIGEE_ORG }}" \
+            --project="${{ secrets.GCP_PROJECT_ID }}" \
+            --override
