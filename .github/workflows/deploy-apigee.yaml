@@ -24,10 +24,12 @@ jobs:
         with:
           credentials_json: '${{ secrets.GCP_SA_KEY }}'
 
+      # This step is now corrected to use apt-get for all installations
       - name: Set up Cloud SDK and tools
         run: |
           sudo apt-get update && sudo apt-get install -y jq
-          gcloud components install beta --quiet
+          # Use apt-get to install beta components, not 'gcloud components install'
+          sudo apt-get install -y google-cloud-cli-beta-commands
 
       - name: Zip the API Proxy bundle
         run: |
@@ -50,11 +52,10 @@ jobs:
           echo "Discovered new revision: $NEW_REVISION"
           echo "revision_id=$NEW_REVISION" >> "$GITHUB_OUTPUT"
 
-      # STEP 2: Deploy the new revision using --override for zero-downtime
+      # STEP 2: Deploy the newly created revision using --override for zero-downtime
       - name: Deploy New Revision with Zero Downtime
         run: |
-          # The --override flag tells Apigee to perform a seamless deployment,
-          # keeping the old revision active until the new one is fully deployed.
+          # The --override flag tells Apigee to perform a seamless deployment
           gcloud apigee apis deploy ${{ steps.import.outputs.revision_id }} \
             --api="product-catalog-v1" \
             --environment="eval" \
