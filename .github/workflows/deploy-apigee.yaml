@@ -11,10 +11,17 @@ jobs:
     name: Deploy Product Catalog Proxy
     runs-on: ubuntu-latest
 
+    # Add permissions for the auth action to work correctly
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # The auth action automatically handles credentials for subsequent gcloud commands.
+      # We do not need to pass any credential flags to gcloud.
       - id: 'auth'
         uses: 'google-github-actions/auth@v2'
         with:
@@ -23,21 +30,33 @@ jobs:
       - name: Set up Cloud SDK
         uses: 'google-github-actions/setup-gcloud@v2'
 
-      - name: Install gcloud beta components
-        run: gcloud components install beta --quiet
-
-      # <<< NEW STEP ADDED HERE >>>
       - name: Zip the API Proxy bundle
         run: |
           cd ./product-catalog-v1
           zip -r ../proxy.zip . -x "*.DS_Store"
 
-      # <<< DEPLOYMENT STEP CORRECTED HERE >>>
-      - name: Deploy API Proxy to eval environment
+      # STEP 1: Import the zip bundle to create a new revision
+      - name: Import API Proxy as new revision
+        id: import_revision
         run: |
-          gcloud apigee apis deploy "product-catalog-v1" \
+          # The 'import' command creates a new revision and outputs its number.
+          # We capture that number into a variable using --format="value(revision)".
+          LATEST_REVISION=$(gcloud apigee apis revisions import \
+            --api="product-catalog-v1" \
+            --source="proxy.zip" \
             --project="${{ secrets.GCP_PROJECT_ID }}" \
             --organization="${{ secrets.GCP_APIGEE_ORG }}" \
+            --format="value(revision)")
+          
+          # We save this revision number as an output of this step
+          echo "revision_id=$LATEST_REVISION" >> "$GITHUB_OUTPUT"
+
+      # STEP 2: Deploy the specific revision we just created
+      - name: Deploy the new revision
+        run: |
+          gcloud apigee deployments deploy \
+            --api="product-catalog-v1" \
             --environment="eval" \
-            --service-account-from-file="${{ steps.auth.outputs.credentials_file_path }}" \
-            --import=proxy.zip
+            --revision="${{ steps.import_revision.outputs.revision_id }}" \
+            --project="${{ secrets.GCP_PROJECT_ID }}" \
+            --organization="${{ secrets.GCP_APIGEE_ORG }}"
