@@ -1,0 +1,37 @@
+name: Deploy Apigee Proxy
+
+# This workflow runs on any push to the main branch
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: # Allows manual triggering from the Actions tab
+
+jobs:
+  deploy-apigee-proxy:
+    name: Deploy Product Catalog Proxy
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Check out the repository code
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Authenticate to Google Cloud using the stored Service Account Key
+      - id: 'auth'
+        uses: 'google-github-actions/auth@v2'
+        with:
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+      # 3. Set up the gcloud CLI
+      - name: Set up Cloud SDK
+        uses: 'google-github-actions/setup-gcloud@v2'
+
+      # 4. Deploy the Apigee proxy using gcloud
+      - name: Deploy API Proxy to eval environment
+        run: |
+          gcloud beta apigee apis deploy "product-catalog-v1" \
+            --project="${{ secrets.GCP_PROJECT_ID }}" \
+            --organization="${{ secrets.GCP_APIGEE_ORG }}" \
+            --environment="eval" \
+            --api-proxy-folder="./product-catalog-v1"
