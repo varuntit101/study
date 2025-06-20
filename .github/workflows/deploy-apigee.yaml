@@ -11,7 +11,6 @@ jobs:
     name: Deploy Product Catalog Proxy
     runs-on: ubuntu-latest
 
-    # Add permissions for the auth action to work correctly
     permissions:
       contents: 'read'
       id-token: 'write'
@@ -20,8 +19,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # The auth action automatically handles credentials for subsequent gcloud commands.
-      # We do not need to pass any credential flags to gcloud.
       - id: 'auth'
         uses: 'google-github-actions/auth@v2'
         with:
@@ -29,34 +26,18 @@ jobs:
 
       - name: Set up Cloud SDK
         uses: 'google-github-actions/setup-gcloud@v2'
-
+      
+      # Step 1: Zip the API Proxy bundle. This is unchanged and works.
       - name: Zip the API Proxy bundle
         run: |
           cd ./product-catalog-v1
           zip -r ../proxy.zip . -x "*.DS_Store"
 
-      # STEP 1: Import the zip bundle to create a new revision
-      - name: Import API Proxy as new revision
-        id: import_revision
+      # Step 2: Deploy the zipped bundle. This command is now corrected.
+      - name: Deploy API Proxy from Zip
         run: |
-          # The 'import' command creates a new revision and outputs its number.
-          # We capture that number into a variable using --format="value(revision)".
-          LATEST_REVISION=$(gcloud apigee apis revisions import \
-            --api="product-catalog-v1" \
-            --source="proxy.zip" \
+          gcloud apigee apis deploy "product-catalog-v1" \
             --project="${{ secrets.GCP_PROJECT_ID }}" \
             --organization="${{ secrets.GCP_APIGEE_ORG }}" \
-            --format="value(revision)")
-          
-          # We save this revision number as an output of this step
-          echo "revision_id=$LATEST_REVISION" >> "$GITHUB_OUTPUT"
-
-      # STEP 2: Deploy the specific revision we just created
-      - name: Deploy the new revision
-        run: |
-          gcloud apigee deployments deploy \
-            --api="product-catalog-v1" \
             --environment="eval" \
-            --revision="${{ steps.import_revision.outputs.revision_id }}" \
-            --project="${{ secrets.GCP_PROJECT_ID }}" \
-            --organization="${{ secrets.GCP_APIGEE_ORG }}"
+            --source="proxy.zip"
