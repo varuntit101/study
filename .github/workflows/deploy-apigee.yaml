@@ -27,6 +27,10 @@ jobs:
       - name: Set up Cloud SDK
         uses: 'google-github-actions/setup-gcloud@v2'
 
+      # 4. Install the gcloud beta components non-interactively
+      - name: Install gcloud beta components
+        run: gcloud components install beta --quiet
+
       # 4. Deploy the Apigee proxy using gcloud
       - name: Deploy API Proxy to eval environment
         run: |
