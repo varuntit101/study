@@ -65,7 +65,7 @@ jobs:
       - name: Automated Smoke Test
         run: |
           # Give the deployment a few seconds to fully propagate
-          sleep 15
+          sleep 60
           
           PROXY_ENDPOINT="https://${{ secrets.APIGEE_HOSTNAME }}/product-catalog-v1/products"
           
